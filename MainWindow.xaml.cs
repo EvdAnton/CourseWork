@@ -11,66 +11,75 @@ using System.IO;
 using VideoLibrary;
 using MediaToolkit.Model;
 using MediaToolkit;
+using System.Windows.Documents;
+using System.Threading;
 
 namespace CheatMusic_Try2_
 {
     /// <summary> 
     /// Логика взаимодействия для MainWindow.xaml
     /// </summary>
-   
+  
     public partial class MainWindow : Window
     {
 
+        private static AutoResetEvent waitHandle = new AutoResetEvent(false);
+
+
+        const char SONG_SEPARATOR = ' ';
+        const char DOWN_SEPARATOR = '_';
+
+        public static SongText myFormText = null;
+
         List<PlayerItem> items = new List<PlayerItem>();
-        private MediaElement media_Element = new MediaElement();
-        bool Repeat = false;
+        private MediaElement mediaElement = new MediaElement();
+
+        bool isRepeat = false;
 
         public MainWindow()
         {
             InitializeComponent();
+
+
             HiddenForm.Click += (s, e) => WindowState = WindowState.Minimized;
-            PowerOff.Click += (s, e) => Close();
+            PowerOff.Click += (s, e) => {
+                if (myFormText != null)
+                    myFormText.Close();
+                Close();
+            };
         }
-       
      
 
-        void timer_Tick(object sender, EventArgs e)
+        private void Timer_Tick(object sender, EventArgs e)
         {
-            Volum.Value = media_Element.Position.TotalSeconds;
-            Current_Duration.Text = media_Element.Position.ToString(@"mm\:ss");
+            volum.Value = mediaElement.Position.TotalSeconds;
+            currentDuration.Text = mediaElement.Position.ToString(@"mm\:ss");
         }
 
 
         private void Stop_Click(object sender, RoutedEventArgs e)
         {
-            media_Element.Pause();
+            mediaElement.Pause();
             Stop.Visibility = Visibility.Hidden;
             Play.Visibility = Visibility.Visible;
         }
-
        
 
         private void ListViewItem_Selected(object sender, RoutedEventArgs e)
         {
-            media_Element.Source = new Uri((sender as PlayerItem).Path,UriKind.RelativeOrAbsolute);
-            media_Element.LoadedBehavior = MediaState.Manual;
-            media_Element.UnloadedBehavior = MediaState.Manual;
-            media_Element.Play();
+            mediaElement.Source = new Uri((sender as PlayerItem).Path,UriKind.RelativeOrAbsolute);
+            mediaElement.LoadedBehavior = MediaState.Manual;
+            mediaElement.UnloadedBehavior = MediaState.Manual;
+            mediaElement.Play();
             Play.Visibility = Visibility.Hidden;
             Stop.Visibility = Visibility.Visible;
         }
 
-
-        private void Click_MouseDown(object sender, MouseButtonEventArgs e)
-        {
-          
-        }
-
         private void Play_Click(object sender, RoutedEventArgs e)
         {
-            if (media_Element.Source != null)
+            if (mediaElement.Source != null)
             {
-                media_Element.Play();
+                mediaElement.Play();
                 Play.Visibility = Visibility.Hidden;
                 Stop.Visibility = Visibility.Visible;
             }
@@ -86,45 +95,45 @@ namespace CheatMusic_Try2_
         private void Shaker_Click(object sender, RoutedEventArgs e)
         {
             Random rnd = new Random();
+
             for(int i = 0; i < items.Count; i++)
             {
                 int itemsIndex = rnd.Next(items.Count);
                 SwapItemsInList(i, itemsIndex);
             }
-            ListMusic.Items.Clear();
+            listMusic.Items.Clear();
             for (int i = 0; i < items.Count; i++)
             {
                 items[i].NumberInLIst = i;
-                ListMusic.Items.Add(items[i]);
+                listMusic.Items.Add(items[i]);
             }
-
         }
 
-        private void Window_Loaded(object sender, RoutedEventArgs e)
+        private void ChooseTrack_MouseDown(object sender, RoutedEventArgs e)
         {
-            
-        }
+            if (mediaElement.Source != null)
+                mediaElement.Stop();
+            mediaElement.Volume = volumeSlider.Value;
 
-        private void Choose_Track(object sender, RoutedEventArgs e)
-        {
-            if (media_Element.Source != null)
-                media_Element.Stop();
-            media_Element.Volume = Volume_Slider.Value;
-            string MyPath = (sender as PlayerItem).Path;
-            Track_name.Text = Path.GetFileNameWithoutExtension(MyPath);
-            media_Element.Source = new Uri(MyPath, UriKind.RelativeOrAbsolute);
-            media_Element.LoadedBehavior = MediaState.Manual;
-            media_Element.UnloadedBehavior = MediaState.Manual;
-            media_Element.MediaOpened += GetDuration_MediaOpened;
-            media_Element.Play();
+            var myItem = (sender as PlayerItem);
+            string myPath = myItem.Path;
+            trackName.Text = myItem.songName;
 
-            Volum.Value = media_Element.Position.TotalSeconds;
-            Current_Duration.Text = media_Element.Position.ToString(@"mm\:ss");
+            mediaElement.Source = new Uri(myPath, UriKind.RelativeOrAbsolute);
+            mediaElement.LoadedBehavior = MediaState.Manual;
+            mediaElement.UnloadedBehavior = MediaState.Manual;
+
+            mediaElement.MediaOpened += GetDuration_MediaOpened;
+            mediaElement.Play();
+
+            volum.Value = mediaElement.Position.TotalSeconds;
+            currentDuration.Text = mediaElement.Position.ToString(@"mm\:ss");
 
             DispatcherTimer timer = new DispatcherTimer();
             timer.Interval = TimeSpan.FromSeconds(1);
-            timer.Tick += timer_Tick;
+            timer.Tick += Timer_Tick;
             timer.Start();
+
             Play.Visibility = Visibility.Hidden;
             Stop.Visibility = Visibility.Visible;
 
@@ -132,10 +141,9 @@ namespace CheatMusic_Try2_
 
         void GetDuration_MediaOpened(object sender, RoutedEventArgs e)
         {
-            Volum.Maximum = media_Element.NaturalDuration.TimeSpan.TotalSeconds;
-            TimeSpan Ts = TimeSpan.FromSeconds(Math.Round(media_Element.NaturalDuration.TimeSpan.TotalSeconds));
-            Full_Duration.Text = Ts.ToString(@"mm\:ss");
-
+            volum.Maximum = mediaElement.NaturalDuration.TimeSpan.TotalSeconds;
+            TimeSpan ts = TimeSpan.FromSeconds(volum.Maximum);
+            Full_Duration.Text = ts.ToString(@"mm\:ss");
         }
 
 
@@ -143,44 +151,45 @@ namespace CheatMusic_Try2_
         {
             if (e.Data.GetDataPresent(DataFormats.FileDrop))
             {
-                string[] DropPath = e.Data.GetData(DataFormats.FileDrop, true) as string[];
-                foreach (string dropfilepath in DropPath)
-                    AddMusic(dropfilepath);
+                string[] dropPath = e.Data.GetData(DataFormats.FileDrop, true) as string[];
+                foreach (string dropFilePath in dropPath)
+                    AddMusic(dropFilePath);
             }
-        }       
+        }
 
-        private void AddMusic(string dropfilepath)
+        private void AddMusic(string dropFilePath)
         {
-            if ((Path.GetExtension(dropfilepath).Contains(".mp3")) || (Path.GetExtension(dropfilepath).Contains(".wav")))
+            if (Path.GetExtension(dropFilePath).Contains(".mp3") || Path.GetExtension(dropFilePath).Contains(".wav"))
             {
-                Mp3FileReader reader = new Mp3FileReader(Path.GetFullPath(dropfilepath));
-                TimeSpan Ts = reader.TotalTime;
-                PlayerItem pi = new PlayerItem(Path.GetFileNameWithoutExtension(dropfilepath), items.Count + 1, Ts);
-                pi.Path = Path.GetFullPath(dropfilepath);
-                bool IsFind = Find_in_List(pi);
+                Mp3FileReader reader = new Mp3FileReader(Path.GetFullPath(dropFilePath));
+                TimeSpan ts = reader.TotalTime;
+                PlayerItem pi = new PlayerItem(Path.GetFileNameWithoutExtension(dropFilePath), items.Count + 1, ts);
+                pi.Path = Path.GetFullPath(dropFilePath);
+                bool IsFind = FindInList(pi);
                 if (!IsFind)
                 {
-                    pi.TrackItem.MouseDown += Choose_Track;
+                    pi.TrackItem.MouseDown += ChooseTrack_MouseDown;
+                    pi.TrackItem.MouseWheel += GetSongText_MouseWheel;
                     items.Add(pi);
-                    ListMusic.Items.Add(pi);
+                    listMusic.Items.Add(pi);
                 }
             }
         }
 
-        private bool Find_in_List(PlayerItem item)
+        private bool FindInList(PlayerItem item)
         {
             bool isFind = false;
-            foreach(var allitems in items)
+            foreach(var allItems in items)
             {
-                if (allitems.Path == item.Path)
+                if (allItems.Path == item.Path)
                     isFind = true;
             }
             return isFind;
         }
 
-        private void Next_Track_Click(object sender, RoutedEventArgs e)
+        private void NextTrack_Click(object sender, RoutedEventArgs e)
         {
-            if (media_Element.Source != null)
+            if (mediaElement.Source != null)
             {
                 bool IsFind = false;
                 int i = 0;
@@ -188,70 +197,69 @@ namespace CheatMusic_Try2_
                 {
                     do
                     {
-                        if (items[i].Path == media_Element.Source.LocalPath.ToString())
+                        if (items[i].Path == mediaElement.Source.LocalPath.ToString())
                             IsFind = true;
 
                         i++;
                     } while ((i < items.Count - 1) && (!IsFind));
                     if (i < items.Count)
-                        media_Element.Source = new Uri(items[i].Path, UriKind.RelativeOrAbsolute);
+                        mediaElement.Source = new Uri(items[i].Path, UriKind.RelativeOrAbsolute);
                     else
-                        media_Element.Stop();
+                        mediaElement.Stop();
                 }
                 else
-                    media_Element.Stop();
-                media_Element.LoadedBehavior = MediaState.Manual;
-                media_Element.UnloadedBehavior = MediaState.Manual;
+                    mediaElement.Stop();
+                mediaElement.LoadedBehavior = MediaState.Manual;
+                mediaElement.UnloadedBehavior = MediaState.Manual;
 
-                Track_name.Text = System.IO.Path.GetFileNameWithoutExtension(items[i].Path);
-                Volum.Value = media_Element.Position.TotalSeconds;
-                Current_Duration.Text = media_Element.Position.ToString(@"mm\:ss");
+                trackName.Text = Path.GetFileNameWithoutExtension(items[i].Path);
+                volum.Value = mediaElement.Position.TotalSeconds;
+                currentDuration.Text = mediaElement.Position.ToString(@"mm\:ss");
 
-                media_Element.Play();
+                mediaElement.Play();
             }
         }
 
-        private void Pred_Track_Click(object sender, RoutedEventArgs e)
+        private void PredTrack_Click(object sender, RoutedEventArgs e)
         {
-            if (media_Element.Source != null)
+            if (mediaElement.Source != null)
             {
-                bool IsFind = false;
+                bool isFind = false;
                 int i = items.Count - 1;
                 if (i > 0)
                 {
-                    
                     do
                     {
-                        if (items[i].Path == media_Element.Source.LocalPath.ToString())
-                            IsFind = true;
+                        if (items[i].Path == mediaElement.Source.LocalPath.ToString())
+                            isFind = true;
 
                         i--;
-                    } while ((i > 0) && (!IsFind));
+                    } while ((i > 0) && (!isFind));
                     if (i >= 0)
-                        media_Element.Source = new Uri(items[i].Path, UriKind.RelativeOrAbsolute);
+                        mediaElement.Source = new Uri(items[i].Path, UriKind.RelativeOrAbsolute);
                     else
-                        media_Element.Stop();
+                        mediaElement.Stop();
                 }
                 else
-                    media_Element.Stop();
-                media_Element.LoadedBehavior = MediaState.Manual;
-                media_Element.UnloadedBehavior = MediaState.Manual;
+                    mediaElement.Stop();
+                mediaElement.LoadedBehavior = MediaState.Manual;
+                mediaElement.UnloadedBehavior = MediaState.Manual;
 
-                Track_name.Text = System.IO.Path.GetFileNameWithoutExtension(items[i].Path);
-                Volum.Value = media_Element.Position.TotalSeconds;
-                Current_Duration.Text = media_Element.Position.ToString(@"mm\:ss");
+                trackName.Text = Path.GetFileNameWithoutExtension(items[i].Path);
+                volum.Value = mediaElement.Position.TotalSeconds;
+                currentDuration.Text = mediaElement.Position.ToString(@"mm\:ss");
 
-                media_Element.Play();
+                mediaElement.Play();
             }
         }
 
         private void Replay_Click(object sender, RoutedEventArgs e)
         {
-            if (media_Element.Source != null)
+            if (mediaElement.Source != null)
             {
                 if (Replay.IsChecked.Value)
                 {
-                    Repeat = true;
+                    isRepeat = true;
                     Replay.Background = Brushes.DimGray;
                 }
                 else
@@ -261,74 +269,75 @@ namespace CheatMusic_Try2_
 
         private void Volum_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
-            if (media_Element.Source != null)
+            if (mediaElement.Source != null)
             {
                 TimeSpan ts = TimeSpan.FromSeconds(e.NewValue);
-                media_Element.Position = ts;
-                
-                if ((Current_Duration.Text == Full_Duration.Text)&&(!Repeat))
-                    Next_Track_Click(sender, e);
-                else if ((Current_Duration.Text == Full_Duration.Text) && (Repeat))
+                mediaElement.Position = ts;
+
+                if ((volum.Value == volum.Maximum) && (isRepeat))
                 {
-                    media_Element.Stop();
-                    media_Element.Play();
+                    mediaElement.Stop();
+                    mediaElement.Play();
                 }
-                Volum.Value = media_Element.Position.TotalSeconds;
-                Current_Duration.Text = media_Element.Position.ToString(@"mm\:ss");
+                if ((currentDuration.Text == Full_Duration.Text)&&(!isRepeat))
+                    NextTrack_Click(sender, e);
+                
+                volum.Value = mediaElement.Position.TotalSeconds;
+                currentDuration.Text = mediaElement.Position.ToString(@"mm\:ss");
 
             }
         }
 
         private void Volume_Click(object sender, RoutedEventArgs e)
         {
-            if (Volume.IsChecked.Value)
-                Volume_Slider.Visibility = Visibility.Visible;
+            if (volume.IsChecked.Value)
+                volumeSlider.Visibility = Visibility.Visible;
             else
-                Volume_Slider.Visibility = Visibility.Hidden;
+                volumeSlider.Visibility = Visibility.Hidden;
         }
 
-        private void Volume_Slider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        private void VolumeSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
         {
-            if (media_Element.Source != null)
+            if (mediaElement.Source != null)
             {
-                media_Element.Volume = Volume_Slider.Value;
-                if (media_Element.Volume == 0)
+                mediaElement.Volume = volumeSlider.Value;
+                if (mediaElement.Volume == 0)
                 {
-                    Volume.Visibility = Visibility.Hidden;
-                    Mute.Visibility = Visibility.Visible;
+                    volume.Visibility = Visibility.Hidden;
+                    mute.Visibility = Visibility.Visible;
                 }
                 else
                 {
-                    Volume.Visibility = Visibility.Visible;
-                    Mute.Visibility = Visibility.Hidden;
+                    volume.Visibility = Visibility.Visible;
+                    mute.Visibility = Visibility.Hidden;
                 }
             }
         }
 
         private void Mute_Click(object sender, RoutedEventArgs e)
         {
-            if (!Mute.IsChecked.Value)
-                Volume_Slider.Visibility = Visibility.Hidden;
+            if (!mute.IsChecked.Value)
+                volumeSlider.Visibility = Visibility.Hidden;
             else
-                Volume_Slider.Visibility = Visibility.Visible;
+                volumeSlider.Visibility = Visibility.Visible;
         }
 
         private void SearchField_GotFocus(object sender, RoutedEventArgs e)
         {
-            if (SearchField.Text == "Search for music in Internet")
+            if (searchField.Text == "Search for music in Internet")
             {
-                SearchField.Text = "";
-                SearchField.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FFB0C4D9"));
+                searchField.Text = "";
+                searchField.Foreground = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FFB0C4D9"));
             }
         }
 
         private void SearchField_LostFocus(object sender, RoutedEventArgs e)
         {
-            SearchField.Text = "Search for music in Internet";
-            SearchField.Foreground = Brushes.Gray;
+            searchField.Text = "Search for music in Internet";
+            searchField.Foreground = Brushes.Gray;
         }
 
-        private string MyParse(string songname)
+        private string PrepearSongName(string songname)
         {
             string result = "";
             for(int i = 0; i < songname.Length; i++)
@@ -346,59 +355,82 @@ namespace CheatMusic_Try2_
 
         private void SearchField_KeyDown(object sender, KeyEventArgs e)
         {
-            string answer = "";
-            string SongName = SearchField.Text;
+            string songName = searchField.Text;
 
-            if ((e.Key == Key.Enter)&&(SongName != "Search for music in Internet")&&(SongName != ""))
+            if ((e.Key == Key.Enter) && (songName != "Search for music in Internet") && (songName != ""))
             {
-                var MyRequest = MyParse(SongName);
-                string url = $"http://ws.audioscrobbler.com/2.0/?method=track.search&track={MyRequest}&api_key=57ee3318536b23ee81d6b27e36997cde&format=json&limit=1";
+                Thread getMP3Thread = new Thread(new ParameterizedThreadStart(GetMP3Async));
+                getMP3Thread.IsBackground = true;
+                getMP3Thread.Start(songName);
+                
+            }
+        }
 
+        private void GetMP3Async(object obj)
+        {
+            string songName = obj as string;
+            string response = ConnectionWithLastFm(songName);
+
+            if (response != string.Empty)
                 try
                 {
-                    HttpWebRequest httpWebRequest = (HttpWebRequest)WebRequest.Create(url);
-                    HttpWebResponse httpWebResponse = (HttpWebResponse)httpWebRequest.GetResponse();
+                    string correctName = ArtistSongNames(response);
 
-                    string response;
-                    try
-                    {
-                        var streamReader = new StreamReader(httpWebResponse.GetResponseStream());
-                        response = streamReader.ReadToEnd();
-                        string subString = "https://www.last.fm/music/";
-                        answer = GetUrlFromResponse(response, subString);
+                    string answer = ConnectionWithYoutube(response);
+                    SaveMP3(answer, correctName);
 
-                        httpWebRequest = (HttpWebRequest)WebRequest.Create(answer);
-                        httpWebResponse = (HttpWebResponse)httpWebRequest.GetResponse();
-                        streamReader = new StreamReader(httpWebResponse.GetResponseStream());
-
-                        response = streamReader.ReadToEnd();
-                        subString = "https://www.youtube.com/watch";
-                        answer = GetUrlFromResponse(response, subString);
-
-                        SaveMP3Async(answer);
-                    }
-                    catch (ArgumentException ex)
-                    {
-                        MessageBox.Show($"\"{SongName}\" not found");
-                    }
                 }
-                catch (Exception ex)
+                catch (ArgumentException)
                 {
-                    MessageBox.Show("No connection to the internet");
+                    MessageBox.Show($"\"{songName}\" not found");
                 }
+        }
 
+        private string ConnectionWithLastFm(string songName)
+        {
+            string result = string.Empty;
+            var myRequest = PrepearSongName(songName);
+            string url = $"http://ws.audioscrobbler.com/2.0/?method=track.search&track={myRequest}&api_key=57ee3318536b23ee81d6b27e36997cde&format=json&limit=1";
+            try
+            {
+                HttpWebRequest httpWebRequest = (HttpWebRequest)WebRequest.Create(url);
+                HttpWebResponse httpWebResponse = (HttpWebResponse)httpWebRequest.GetResponse();
+                var streamReader = new StreamReader(httpWebResponse.GetResponseStream());
+                result = streamReader.ReadToEnd();
             }
+            catch(Exception)
+            {
+                MessageBox.Show("No connection to the internet");
+            }
+
+            return result;    
+        }
+
+        private string ConnectionWithYoutube(string response)
+        {
+            string subString = "https://www.last.fm/music/";
+            string answer = GetUrlFromResponse(response, subString);
+
+            var httpWebRequest = (HttpWebRequest)WebRequest.Create(answer);
+            var httpWebResponse = (HttpWebResponse)httpWebRequest.GetResponse();
+            var streamReader = new StreamReader(httpWebResponse.GetResponseStream());
+
+            response = streamReader.ReadToEnd();
+
+            subString = "https://www.youtube.com/watch";
+            answer = GetUrlFromResponse(response, subString);
+            return answer;
         }
 
         private string GetUrlFromResponse(string response, string subString)
         {
-            string answer = "";
-            
+            string answer = string.Empty;
+
             int indexOfSubstring = response.IndexOf(subString);
             if (indexOfSubstring > 0)
             {
                 int i = indexOfSubstring;
-                char findSymbol = '"';
+                char findSymbol = '"';  
                 while ((response[i] != findSymbol) && (i < response.Length))
                 {
                     answer += response[i];
@@ -413,37 +445,176 @@ namespace CheatMusic_Try2_
                 throw new ArgumentException();
         }
 
-        private async void SaveMP3Async(string VideoURL)
+        private string ArtistSongNames(string response)
         {
+            const string SUBSTR_A = "artist";
+            const string SUBSTR_S = "name";
+
+            string authorSong = GetParamsFromJson(SUBSTR_A, response);
+            authorSong += "-" + GetParamsFromJson(SUBSTR_S, response);
+            return authorSong;
+        }
+
+        private string GetParamsFromJson(string substring, string response)
+        {
+            string result = string.Empty;
+            int index = response.IndexOf(substring);
+            if (index > 0)
+            {
+                index += substring.Length + 3;
+                while (response[index] != '"')
+                {
+                    if (response[index] == SONG_SEPARATOR)
+                        result += DOWN_SEPARATOR;
+                    else
+                        result += response[index];
+                    index++;
+                }
+            }
+            return result;
+        }
+
+        private void SaveMP3(string VideoURL, string artistSongNames)
+        {
+
+            artistSongNames = artistSongNames.Replace(DOWN_SEPARATOR, SONG_SEPARATOR);
+
             try
             {
                 var youtube = YouTube.Default;
-                var vid = await youtube.GetVideoAsync(VideoURL);
+                var video = youtube.GetVideo(VideoURL);
+                
+                File.WriteAllBytes(artistSongNames, video.GetBytes());//Error in mscorlib.dll
 
-                File.WriteAllBytes(vid.FullName, await vid.GetBytesAsync());
-
-                var inputFile = new MediaFile { Filename = vid.FullName };
-                var outputFile = new MediaFile { Filename = $"{vid.FullName}.mp3" };
+                var inputFile = new MediaFile { Filename = $"{artistSongNames}" };
+                var outputFile = new MediaFile { Filename = $"{artistSongNames}.mp3" };
 
                 using (var engine = new Engine())
                 {
                     engine.GetMetadata(inputFile);
-
                     engine.Convert(inputFile, outputFile);
                 }
-                AddMusic(outputFile.Filename);
+                Dispatcher.BeginInvoke(new ThreadStart(delegate { AddMusic(outputFile.Filename); }));
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                MessageBox.Show($"Your song not found");
+                MessageBox.Show($"your song {artistSongNames} not found");
             }
+        }
+
+        private static Thread thread = null;
+
+        private void GetSongText_MouseWheel(object sender, EventArgs e)
+        {
+            if (thread == null)
+            {
+                thread = new Thread(new ParameterizedThreadStart(ShowText));
+                thread.SetApartmentState(ApartmentState.STA);
+                thread.IsBackground = true;
+                thread.Start(sender);
+            }
+
+        }
+
+        private void ShowText(object sender)
+        {
+            string songText = PrepearForBD((sender as PlayerItem).songName, sender);
+            Dispatcher.BeginInvoke(new ThreadStart(delegate { InitializeNewForm(sender, songText); }));
+            waitHandle.WaitOne();
+            thread = null;
+        }
+
+
+        private string PrepearForBD(string url,object sender)
+        {
+            int hash = (sender as PlayerItem).ArtistSongHash;
+            const char SEPARATOR = '-';
+            const char URL_SEPARATOR = '/';
+
+            url = url.Replace(SEPARATOR, URL_SEPARATOR).ToLower();
+            url = url.Replace(SONG_SEPARATOR, DOWN_SEPARATOR);
+
+            try
+            {
+                var httpWebRequest = (HttpWebRequest)WebRequest.Create($"https://en.lyrsense.com/{url}");
+                var httpWebResponse = (HttpWebResponse)httpWebRequest.GetResponse();
+                var streamReader = new StreamReader(httpWebResponse.GetResponseStream());
+
+                string response = streamReader.ReadToEnd();
+                return TryToGetLiryc(response);
+            }
+            catch (Exception)
+            {
+                MessageBox.Show($"No connection to the internet or lirics for {url} not found");
+            }
+            return string.Empty;
+        }
+
+        private string TryToGetLiryc(string response)
+        {
+            const int OFFSET = 11;
+            int index = 1;
+
+            string lirics = string.Empty;
+            string substring = $"highlightLine puzEng line{index}";
             
+            int offset = response.IndexOf(substring);
+            while (offset > 0)
+            {
+                offset += substring.Length + OFFSET;
+                while (response[offset] != '<')
+                {
+                    if (response[offset] != '>')
+                        lirics += response[offset++];
+                    else offset++;
+                }
+                lirics = lirics + (char)13 + (char)10;
+
+                substring = $"highlightLine puzEng line{++index}";
+
+                if ((offset = response.IndexOf(substring)) < 0)
+                {
+                    lirics = lirics + (char)13 + (char)10;
+                    substring = $"highlightLine puzEng line{++index}";
+                    offset = response.IndexOf(substring);
+                }
+            }
+            return lirics.Remove(lirics.LastIndexOf((char)13));
+        }
+
+        private void InitializeNewForm(object sender, string songText)
+        {
+            if (!PlayerItem.WindowTextActivate)
+            {
+                PlayerItem.WindowTextActivate = true;
+                myFormText = new SongText();
+                myFormText.Width = 250;
+                myFormText.Left = Left + Width;
+                myFormText.Top = Top + (Height - myFormText.Height) / 2;
+                myFormText.Show();
+            }
+
+            myFormText.songText_Bottom.Document.Blocks.Clear();
+            myFormText.songText_Bottom.Document.Blocks.Add(new Paragraph(new Run(songText)));
+            myFormText.songText_Bottom.HorizontalContentAlignment = HorizontalAlignment.Center;
+
+            string MyPath = (sender as PlayerItem).Path;
+            myFormText.song_Name_Top.Text = Path.GetFileNameWithoutExtension(MyPath);
+            waitHandle.Set();
         }
 
         private void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             DragMove();
         }
+
+        private void Window_LocationChanged(object sender, EventArgs e)
+        {
+            if (myFormText != null)
+            {
+                myFormText.Left = Left + Width;
+                myFormText.Top = Top + (Height - myFormText.Height) / 2;
+            }
+        }
     }
 }
-
